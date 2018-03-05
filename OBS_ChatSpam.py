@@ -78,14 +78,15 @@ twitch = TwitchIRC()
 
 class ChatMessage:
 	messages = []
+	max_description_length = 32
 
 	def __init__(self, msg, position, obs_settings, irc=twitch):
 		self.text = msg
 		self.irc = irc
 
 		self.obs_data = obs_settings
+
 		self.position = position
-		self.hotkey_description = ""
 		self.hotkey_id = obs.OBS_INVALID_HOTKEY_ID
 		self.hotkey_saved_key = None
 
@@ -118,8 +119,14 @@ class ChatMessage:
 		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
 
 	def register_hotkey(self):
+		if len(self.text) > ChatMessage.max_description_length:
+			key_description = self.text[:ChatMessage.max_description_length - 3] + "..."
+		else:
+			key_description = self.text
+		key_description = "Chat \'" + key_description + "\'"
+
 		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
-		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", "Chat Hotkey" + " \'" + self.text + "\'", self.callback)
+		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", key_description, self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
 	def deregister_hotkey(self):

@@ -78,7 +78,6 @@ twitch = TwitchIRC()
 
 class ChatMessage:
 	messages = []
-	message_list = []
 
 	def __init__(self, msg, position, obs_settings, irc=twitch):
 		self.text = msg
@@ -115,8 +114,10 @@ class ChatMessage:
 
 	@staticmethod
 	def check_messages(new_msgs, settings):
-		if new_msgs == ChatMessage.message_list:
-			return
+		# Create array for easy comparison
+		old_msgs = []
+		for msg_obj in ChatMessage.messages:
+			old_msgs.append(msg_obj.text)
 
 		for msg in ChatMessage.messages:
 			msg.remove_hotkey()
@@ -125,7 +126,6 @@ class ChatMessage:
 		for pos, new_msg in enumerate(new_msgs):
 			ChatMessage(new_msg, pos, settings)
 
-		ChatMessage.message_list = new_msgs
 
 # ------------------------------------------------------------
 

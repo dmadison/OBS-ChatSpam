@@ -90,25 +90,26 @@ class ChatMessage:
 		self.hotkey_saved_key = None
 
 		self.load_hotkey()
-		self.set_hotkey()
+		self.register_hotkey()
 
 		ChatMessage.messages.append(self)
 
 	def load_hotkey(self):
 		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
 
-	def set_hotkey(self):
+	def register_hotkey(self):
 		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
 		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", "Chat Hotkey" + " \'" + self.text + "\'", self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
+
+	def deregister_hotkey(self):
+		obs.obs_hotkey_unregister(self.callback)
 
 	def save_hotkey(self):
 		self.hotkey_saved_key = obs.obs_hotkey_save(self.hotkey_id)
 		obs.obs_data_set_array(self.obs_data, "chat_hotkey_" + str(self.position), self.hotkey_saved_key)
 		obs.obs_data_array_release(self.hotkey_saved_key)
 
-	def remove_hotkey(self):
-		obs.obs_hotkey_unregister(self.callback)
 
 	def send(self, pressed=True):
 		if pressed:
@@ -124,7 +125,7 @@ class ChatMessage:
 			old_msgs.append(msg_obj.text)
 
 		for msg in ChatMessage.messages:
-			msg.remove_hotkey()
+			msg.deregister_hotkey()
 
 		ChatMessage.messages = []
 		for pos, new_msg in enumerate(new_msgs):
@@ -179,4 +180,4 @@ def script_save(settings):
 
 def script_unload():
 	for message in ChatMessage.messages:
-		message.remove_hotkey()
+		message.deregister_hotkey()

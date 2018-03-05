@@ -82,28 +82,29 @@ class ChatMessage:
 	def __init__(self, msg, position, obs_settings, irc=twitch):
 		self.text = msg
 		self.irc = irc
-		self.position = position
 
+		self.obs_data = obs_settings
+		self.position = position
 		self.hotkey_description = ""
 		self.hotkey_id = obs.OBS_INVALID_HOTKEY_ID
 		self.hotkey_saved_key = None
 
-		self.load_hotkey(obs_settings)
-		self.set_hotkey(obs_settings)
+		self.load_hotkey()
+		self.set_hotkey()
 
 		ChatMessage.messages.append(self)
 
-	def load_hotkey(self, settings):
-		self.hotkey_saved_key = obs.obs_data_get_array(settings, "chat_hotkey_" + str(self.position))
+	def load_hotkey(self):
+		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
 
-	def set_hotkey(self, settings):
+	def set_hotkey(self):
 		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
 		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", "Chat Hotkey" + " \'" + self.text + "\'", self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
-	def save_hotkey(self, settings):
+	def save_hotkey(self):
 		self.hotkey_saved_key = obs.obs_hotkey_save(self.hotkey_id)
-		obs.obs_data_set_array(settings, "chat_hotkey_" + str(self.position), self.hotkey_saved_key)
+		obs.obs_data_set_array(self.obs_data, "chat_hotkey_" + str(self.position), self.hotkey_saved_key)
 		obs.obs_data_array_release(self.hotkey_saved_key)
 
 	def remove_hotkey(self):
@@ -174,7 +175,7 @@ def script_properties():
 #
 def script_save(settings):
 	for message in ChatMessage.messages:
-		message.save_hotkey(settings)
+		message.save_hotkey()
 
 def script_unload():
 	for message in ChatMessage.messages:

@@ -91,8 +91,28 @@ class ChatMessage:
 
 		self.load_hotkey()
 		self.register_hotkey()
+		self.save_hotkey()
 
-		ChatMessage.messages.append(self)
+	def __del__(self):
+		self.cleanup()
+
+	def cleanup(self):
+		self.deregister_hotkey()
+		self.release_memory()
+
+	def release_memory(self):
+		obs.obs_data_array_release(self.hotkey_saved_key)
+
+	def new_text(self, msg):
+		self.text = msg
+		self.deregister_hotkey()
+		self.register_hotkey()
+
+	def new_position(self, pos):
+		self.deregister_hotkey()
+		self.unsave_hotkey()
+		self.position = pos
+		self.register_hotkey()
 
 	def load_hotkey(self):
 		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
@@ -108,8 +128,9 @@ class ChatMessage:
 	def save_hotkey(self):
 		self.hotkey_saved_key = obs.obs_hotkey_save(self.hotkey_id)
 		obs.obs_data_set_array(self.obs_data, "chat_hotkey_" + str(self.position), self.hotkey_saved_key)
-		obs.obs_data_array_release(self.hotkey_saved_key)
 
+	def unsave_hotkey(self):
+		obs.obs_data_erase(self.obs_data, "chat_hotkey_" + str(self.position))
 
 	def send(self, pressed=True):
 		if pressed:
@@ -119,17 +140,54 @@ class ChatMessage:
 
 	@staticmethod
 	def check_messages(new_msgs, settings):
-		# Create array for easy comparison
-		old_msgs = []
-		for msg_obj in ChatMessage.messages:
-			old_msgs.append(msg_obj.text)
+		# Check if list hasn't changed
+		if len(new_msgs) == len(ChatMessage.messages):
+			num_diff = 0
+			diff_index = None
 
+			for index, msg in enumerate(ChatMessage.messages):
+				if new_msgs[index] != msg.text:
+					num_diff += 1
+					diff_index = index
+					if num_diff > 1:
+						break
+
+			if num_diff == 0:
+				return  # Lists identical
+			elif num_diff == 1:
+				ChatMessage.messages[diff_index].new_text(new_msgs[diff_index])
+				return  # Single entry modified
+
+		# Check if objects already exist, otherwise create them
+		new_list = []
+		for pos, msg in enumerate(new_msgs):
+			for msg_obj in ChatMessage.messages:
+				if msg == msg_obj.text:
+					new_list.append(msg_obj)
+					break
+			else:
+				new_list.append(ChatMessage(msg, pos, settings))
+
+		# Clean up old objects
 		for msg in ChatMessage.messages:
-			msg.deregister_hotkey()
+			for msg_new in new_msgs:
+				if msg.text == msg_new:
+					break
+			else:
+				msg.cleanup()
+				msg.unsave_hotkey()
 
-		ChatMessage.messages = []
-		for pos, new_msg in enumerate(new_msgs):
-			ChatMessage(new_msg, pos, settings)
+		# Assign to master array and reindex
+		ChatMessage.messages = new_list
+		ChatMessage.__reindex_messages()
+
+	@staticmethod
+	def __reindex_messages():
+		for index, msg in enumerate(ChatMessage.messages):
+			msg.new_position(index)
+
+		for msg in ChatMessage.messages:  # Separate loop as to avoid memory overwrites
+			msg.save_hotkey()
 
 
 # ------------------------------------------------------------
@@ -163,6 +221,8 @@ def script_update(settings):
 
 	ChatMessage.check_messages(messages, settings)
 
+	#print("Settings JSON", obs.obs_data_get_json(settings))
+
 def script_properties():
 	props = obs.obs_properties_create()
 
@@ -180,4 +240,4 @@ def script_save(settings):
 
 def script_unload():
 	for message in ChatMessage.messages:
-		message.deregister_hotkey()
+		message.cleanup()

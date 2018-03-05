@@ -74,22 +74,126 @@ class TwitchIRC:
 	def __pong(self, host):
 		self.__sock.send(("PONG" + host).encode("utf-8"))
 
-# ------------------------------------------------------------
-
-# Global Vars
-chat_text = ""
-hotkey_id = obs.OBS_INVALID_HOTKEY_ID
 twitch = TwitchIRC()
 
-def chat(pressed):
-	if pressed:
-		twitch.connect()
-		twitch.chat(chat_text)
-		twitch.disconnect()
+class ChatMessage:
+	messages = []
+	max_description_length = 32
 
-def test_pressed(props, prop):
-	print("Testing chat spam script...")
-	chat(True)
+	def __init__(self, msg, position, obs_settings, irc=twitch):
+		self.text = msg
+		self.irc = irc
+
+		self.obs_data = obs_settings
+
+		self.position = position
+		self.hotkey_id = obs.OBS_INVALID_HOTKEY_ID
+		self.hotkey_saved_key = None
+
+		self.load_hotkey()
+		self.register_hotkey()
+		self.save_hotkey()
+
+	def __del__(self):
+		self.cleanup()
+
+	def cleanup(self):
+		self.deregister_hotkey()
+		self.release_memory()
+
+	def release_memory(self):
+		obs.obs_data_array_release(self.hotkey_saved_key)
+
+	def new_text(self, msg):
+		self.text = msg
+		self.deregister_hotkey()
+		self.register_hotkey()
+
+	def new_position(self, pos):
+		self.deregister_hotkey()
+		self.unsave_hotkey()
+		self.position = pos
+		self.register_hotkey()
+
+	def load_hotkey(self):
+		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
+
+	def register_hotkey(self):
+		if len(self.text) > ChatMessage.max_description_length:
+			key_description = self.text[:ChatMessage.max_description_length - 3] + "..."
+		else:
+			key_description = self.text
+		key_description = "Chat \'" + key_description + "\'"
+
+		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
+		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", key_description, self.callback)
+		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
+
+	def deregister_hotkey(self):
+		obs.obs_hotkey_unregister(self.callback)
+
+	def save_hotkey(self):
+		self.hotkey_saved_key = obs.obs_hotkey_save(self.hotkey_id)
+		obs.obs_data_set_array(self.obs_data, "chat_hotkey_" + str(self.position), self.hotkey_saved_key)
+
+	def unsave_hotkey(self):
+		obs.obs_data_erase(self.obs_data, "chat_hotkey_" + str(self.position))
+
+	def send(self, pressed=True):
+		if pressed:
+			self.irc.connect()
+			self.irc.chat(self.text)
+			self.irc.disconnect()
+
+	@staticmethod
+	def check_messages(new_msgs, settings):
+		# Check if list hasn't changed
+		if len(new_msgs) == len(ChatMessage.messages):
+			num_diff = 0
+			diff_index = None
+
+			for index, msg in enumerate(ChatMessage.messages):
+				if new_msgs[index] != msg.text:
+					num_diff += 1
+					diff_index = index
+					if num_diff > 1:
+						break
+			else:
+				if num_diff != 0:
+					ChatMessage.messages[diff_index].new_text(new_msgs[diff_index])  # single entry modified
+				return  # Lists identical
+
+		# Check if objects already exist, otherwise create them
+		new_list = []
+		for pos, msg in enumerate(new_msgs):
+			for msg_obj in ChatMessage.messages:
+				if msg == msg_obj.text:
+					new_list.append(msg_obj)
+					break
+			else:
+				new_list.append(ChatMessage(msg, pos, settings))
+
+		# Clean up old objects
+		for msg in ChatMessage.messages:
+			for msg_new in new_msgs:
+				if msg.text == msg_new:
+					break
+			else:
+				msg.cleanup()
+				msg.unsave_hotkey()
+
+		# Assign to master array and reindex
+		ChatMessage.messages = new_list
+		ChatMessage.__reindex_messages()
+
+	@staticmethod
+	def __reindex_messages():
+		for index, msg in enumerate(ChatMessage.messages):
+			msg.new_position(index)
+
+		for msg in ChatMessage.messages:  # Separate loop as to avoid memory overwrites
+			msg.save_hotkey()
+
 
 # ------------------------------------------------------------
 
@@ -112,29 +216,33 @@ def script_update(settings):
 	twitch.password = obs.obs_data_get_string(settings, "oauth").lower()
 	chat_text = obs.obs_data_get_string(settings, "chat_text")
 
+	obs_messages = obs.obs_data_get_array(settings, "messages")
+	num_messages = obs.obs_data_array_count(obs_messages)
+
+	messages = []
+	for i in range(num_messages):  # Convert C array to Python list
+		message_object = obs.obs_data_array_item(obs_messages, i)
+		messages.append(obs.obs_data_get_string(message_object, "value"))
+
+	ChatMessage.check_messages(messages, settings)
+
+	#print("Settings JSON", obs.obs_data_get_json(settings))
+
 def script_properties():
 	props = obs.obs_properties_create()
 
 	obs.obs_properties_add_text(props, "channel", "Channel", obs.OBS_TEXT_DEFAULT)
 	obs.obs_properties_add_text(props, "user", "User", obs.OBS_TEXT_DEFAULT)
 	obs.obs_properties_add_text(props, "oauth", "Oauth", obs.OBS_TEXT_PASSWORD)
-	obs.obs_properties_add_text(props, "chat_text", "Chat Text", obs.OBS_TEXT_MULTILINE)
 
-	obs.obs_properties_add_button(props, "test_button", "Test", test_pressed)
+	obs.obs_properties_add_editable_list(props, "messages", "Messages", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
 
 	return props
-
-def script_load(settings):
-	global hotkey_id
-
-	hotkey_id = obs.obs_hotkey_register_frontend("twitch_chat_hotkey", "Twitch Chat Hotkey", chat)
-	hotkey_saved_key = obs.obs_data_get_array(settings, "twitch_chat_hotkey")
-	obs.obs_hotkey_load(hotkey_id, hotkey_saved_key)
-
+#
 def script_save(settings):
-	hotkey_saved_key = obs.obs_hotkey_save(hotkey_id)
-	obs.obs_data_set_array(settings, "twitch_chat_hotkey", hotkey_saved_key)
-	obs.obs_data_array_release(hotkey_saved_key)
+	for message in ChatMessage.messages:
+		message.save_hotkey()
 
 def script_unload():
-	obs.obs_hotkey_unregister(chat)
+	for message in ChatMessage.messages:
+		message.cleanup()

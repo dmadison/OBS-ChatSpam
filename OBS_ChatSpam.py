@@ -88,14 +88,17 @@ class ChatMessage:
 		self.hotkey_id = obs.OBS_INVALID_HOTKEY_ID
 		self.hotkey_saved_key = None
 
+		self.load_hotkey(obs_settings)
 		self.set_hotkey(obs_settings)
 
 		ChatMessage.messages.append(self)
 
+	def load_hotkey(self, settings):
+		self.hotkey_saved_key = obs.obs_data_get_array(settings, "chat_hotkey_" + str(self.position))
+
 	def set_hotkey(self, settings):
 		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
 		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", "Chat Hotkey" + " \'" + self.text + "\'", self.callback)
-		self.hotkey_saved_key = obs.obs_data_get_array(settings, "chat_hotkey_" + str(self.position))
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
 	def save_hotkey(self, settings):

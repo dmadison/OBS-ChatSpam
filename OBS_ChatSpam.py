@@ -158,12 +158,10 @@ class ChatMessage:
 					diff_index = index
 					if num_diff > 1:
 						break
-
-			if num_diff == 0:
+			else:
+				if num_diff != 0:
+					ChatMessage.messages[diff_index].new_text(new_msgs[diff_index])  # single entry modified
 				return  # Lists identical
-			elif num_diff == 1:
-				ChatMessage.messages[diff_index].new_text(new_msgs[diff_index])
-				return  # Single entry modified
 
 		# Check if objects already exist, otherwise create them
 		new_list = []

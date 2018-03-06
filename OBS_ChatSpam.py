@@ -20,7 +20,7 @@
 
 import obspython as obs
 import socket
-from time import sleep
+import time
 
 
 class TwitchIRC:
@@ -30,7 +30,14 @@ class TwitchIRC:
 		self.password = passw
 		self.host = host
 		self.port = port
-		self.max_rate = 20/30
+
+		self.rate_num_msgs = 19  # Number of messages allowed...
+		self.rate_timeframe = 30  # ...in timeframe of x seconds
+		self.__message_timestamps = []
+
+		self.__connected = False
+		self.__last_message = None  # Last connection timestamp
+		self.timeout = 10.0  # Time before open connection is closed, in seconds
 
 		self.__sock = socket.socket()
 
@@ -38,15 +45,20 @@ class TwitchIRC:
 		connection_result = self.__connect()
 
 		if connection_result is not True:
+			self.__connected = False
 			if suppress_warnings:
 				print("Connection Error:", connection_result)
 				return False
 			else:
 				raise UserWarning(connection_result)
 
+		self.__connected = True
 		return True
 
 	def __connect(self):
+		if self.__connected:
+			return True  # Already connected, nothing to see here
+
 		self.__sock = socket.socket()
 		self.__sock.settimeout(1)  # One second to connect
 
@@ -74,18 +86,34 @@ class TwitchIRC:
 		return True
 
 	def disconnect(self):
-		self.__sock.shutdown(socket.SHUT_RDWR)
-		self.__sock.close()
+		if self.__connected:
+			self.__sock.shutdown(socket.SHUT_RDWR)
+			self.__sock.close()
+			self.__connected = False
+
+	def connection_timeout(self):
+		if self.__connected and time.time() >= self.__last_message + self.timeout:
+			self.disconnect()
 
 	def test_authentication(self):
 		if self.connect(False):
 			self.disconnect()
 		print("Authentication successful!")
 
-	def chat(self, msg):
-		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
+	def chat(self, msg, suppress_warnings=True):
+		if not self.check_rates() or not self.connect(suppress_warnings):
+			return
+
+		# Store timestamps for rate limit and connection timeout
+		message_time = time.time()
+		self.__message_timestamps.append(message_time + self.rate_timeframe)
+		self.__last_message = message_time
+
+		self.__chat_direct(msg)
 		print("Sent \'" + msg + "\'", "as", self.nickname, "in #" + self.channel)
-		sleep(self.max_rate)  # Simple way to avoid the rate limit
+
+	def __chat_direct(self, msg):
+		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
 
 	def read(self):
 		response = self.__read_socket()
@@ -104,6 +132,29 @@ class TwitchIRC:
 
 	def __pong(self, host):
 		self.__sock.send(("PONG" + host).encode("utf-8"))
+
+	def check_rates(self):
+		index = 0
+
+		# Remove timestamps that have passed
+		for index, timestamp in enumerate(self.__message_timestamps):
+			if time.time() <= timestamp:
+				break
+		self.__message_timestamps = self.__message_timestamps[index:]
+
+		# If at max rate, throw an error
+		if len(self.__message_timestamps) >= self.rate_num_msgs:
+			next_clear = int(self.__message_timestamps[0] - time.time())
+			msg_plural = "s"
+
+			if next_clear <= 1:
+				next_clear = 1  # Avoiding "wait 0 more seconds" messages
+				msg_plural = ""
+
+			print("Error: Rate limit reached. Please wait " + str(next_clear) + " more second" + msg_plural)
+			return False
+
+		return True
 
 twitch = TwitchIRC()
 
@@ -175,9 +226,7 @@ class ChatMessage:
 			self.send()
 
 	def send(self, suppress_warnings=True):
-		if self.irc.connect(suppress_warnings):
-			self.irc.chat(self.text)
-			self.irc.disconnect()
+		self.irc.chat(self.text, suppress_warnings)
 
 	@staticmethod
 	def check_messages(new_msgs, settings):
@@ -233,6 +282,9 @@ class ChatMessage:
 
 # OBS Script Functions
 
+def check_connection():
+	twitch.connection_timeout()
+
 def test_authentication(prop, props):
 	twitch.test_authentication()
 
@@ -249,12 +301,13 @@ def script_description():
 			"www.partsnotincluded.com"
 
 def script_update(settings):
-	global chat_text
-
 	twitch.channel = obs.obs_data_get_string(settings, "channel").lower()
 	twitch.nickname = obs.obs_data_get_string(settings, "user").lower()
-	twitch.password = obs.obs_data_get_string(settings, "oauth").lower()
-	chat_text = obs.obs_data_get_string(settings, "chat_text")
+
+	new_oauth = obs.obs_data_get_string(settings, "oauth").lower()
+	if new_oauth != twitch.password:
+		twitch.disconnect()  # Disconnect old oauth connection, if it exists
+		twitch.password = new_oauth
 
 	obs_messages = obs.obs_data_get_array(settings, "messages")
 	num_messages = obs.obs_data_array_count(obs_messages)
@@ -286,6 +339,11 @@ def script_save(settings):
 	for message in ChatMessage.messages:
 		message.save_hotkey()
 
+def script_load(settings):
+	obs.timer_add(check_connection, 1000)  # Check for timeout every second
+
 def script_unload():
+	obs.timer_remove(check_connection)
+
 	for message in ChatMessage.messages:
 		message.cleanup()

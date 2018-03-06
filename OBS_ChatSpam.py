@@ -86,9 +86,10 @@ class TwitchIRC:
 		return True
 
 	def disconnect(self):
-		self.__sock.shutdown(socket.SHUT_RDWR)
-		self.__sock.close()
-		self.__connected = False
+		if self.__connected:
+			self.__sock.shutdown(socket.SHUT_RDWR)
+			self.__sock.close()
+			self.__connected = False
 
 	def connection_timeout(self):
 		if self.__connected and time.time() >= self.__last_message + self.timeout:

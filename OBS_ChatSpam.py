@@ -232,6 +232,9 @@ class ChatMessage:
 def test_authentication(prop, props):
 	twitch.test_authentication()
 
+def test_message(prop, props):
+	ChatMessage.messages[0].send()
+
 def script_description():
 	return "<b>Twitch Chat Spam</b>" + \
 			"<hr>" + \
@@ -270,6 +273,7 @@ def script_properties():
 
 	obs.obs_properties_add_editable_list(props, "messages", "Messages", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
 	obs.obs_properties_add_button(props, "test_auth", "Test Authentication", test_authentication)
+	obs.obs_properties_add_button(props, "test_message", "Test Message #1", test_message)
 
 	return props
 

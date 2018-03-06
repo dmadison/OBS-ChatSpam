@@ -30,25 +30,35 @@ class TwitchIRC:
 		self.password = passw
 		self.host = host
 		self.port = port
+
 		self.rate_num_msgs = 19  # Number of messages allowed...
 		self.rate_timeframe = 30  # ...in timeframe of x seconds
+		self.__message_timestamps = []
+
+		self.__connected = False
+		self.__last_message = None  # Last connection timestamp
+		self.timeout = 10.0  # Time before open connection is closed, in seconds
 
 		self.__sock = socket.socket()
-		self.__message_timestamps = []
 
 	def connect(self, suppress_warnings=True):
 		connection_result = self.__connect()
 
 		if connection_result is not True:
+			self.__connected = False
 			if suppress_warnings:
 				print("Connection Error:", connection_result)
 				return False
 			else:
 				raise UserWarning(connection_result)
 
+		self.__connected = True
 		return True
 
 	def __connect(self):
+		if self.__connected:
+			return True  # Already connected, nothing to see here
+
 		self.__sock = socket.socket()
 		self.__sock.settimeout(1)  # One second to connect
 
@@ -78,6 +88,11 @@ class TwitchIRC:
 	def disconnect(self):
 		self.__sock.shutdown(socket.SHUT_RDWR)
 		self.__sock.close()
+		self.__connected = False
+
+	def connection_timeout(self):
+		if self.__connected and time.time() >= self.__last_message + self.timeout:
+			self.disconnect()
 
 	def test_authentication(self):
 		if self.connect(False):
@@ -90,9 +105,12 @@ class TwitchIRC:
 		#if not self.check_rates():
 		#	return  # Sending messages too fast!
 
+		message_time = time.time()
+		self.__message_timestamps.append(message_time + self.rate_timeframe)
+		self.__last_message = message_time
+
 		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
 		print("Sent \'" + msg + "\'", "as", self.nickname, "in #" + self.channel)
-		self.__message_timestamps.append(time.time() + self.rate_timeframe)
 
 	def read(self):
 		response = self.__read_socket()
@@ -210,7 +228,6 @@ class ChatMessage:
 
 		if self.irc.connect(suppress_warnings):
 			self.irc.chat(self.text)
-			self.irc.disconnect()
 
 	@staticmethod
 	def check_messages(new_msgs, settings):
@@ -266,6 +283,9 @@ class ChatMessage:
 
 # OBS Script Functions
 
+def check_connection():
+	twitch.connection_timeout()
+
 def test_authentication(prop, props):
 	twitch.test_authentication()
 
@@ -319,6 +339,11 @@ def script_save(settings):
 	for message in ChatMessage.messages:
 		message.save_hotkey()
 
+def script_load(settings):
+	obs.timer_add(check_connection, 1000)  # Check for timeout every second
+
 def script_unload():
+	obs.timer_remove(check_connection)
+
 	for message in ChatMessage.messages:
 		message.cleanup()

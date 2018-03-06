@@ -34,22 +34,53 @@ class TwitchIRC:
 
 		self.__sock = socket.socket()
 
-	def connect(self):
+	def connect(self, suppress_warnings=True):
+		connection_result = self.__connect()
+
+		if connection_result is not True:
+			if suppress_warnings:
+				print("Connection Error:", connection_result)
+				return False
+			else:
+				raise UserWarning(connection_result)
+
+		return True
+
+	def __connect(self):
 		self.__sock = socket.socket()
-		self.__sock.connect((self.host, self.port))
+		self.__sock.settimeout(1)  # One second to connect
+
+		try:
+			self.__sock.connect((self.host, self.port))
+		except socket.gaierror:
+			return "Cannot find server"
+		except (TimeoutError, socket.timeout):
+			return "No response from server (connection timed out)"
+
 		if self.password is not "":
 			self.__sock.send("PASS {}\r\n".format(self.password).encode("utf-8"))
 		self.__sock.send("NICK {}\r\n".format(self.nickname).encode("utf-8"))
 		self.__sock.send("JOIN #{}\r\n".format(self.channel).encode("utf-8"))
 
 		auth_response = self.read()
-
 		if "Welcome, GLHF!" not in auth_response:
-			raise UserWarning("Authentication Error!")
+			return "Bad Authentication! Check your Oauth key"
+
+		try:
+			self.read()  # Wait for "JOIN" response
+		except socket.timeout:
+			return "Channel not found!"
+
+		return True
 
 	def disconnect(self):
 		self.__sock.shutdown(socket.SHUT_RDWR)
 		self.__sock.close()
+
+	def test_authentication(self):
+		if self.connect(False):
+			self.disconnect()
+		print("Authentication successful!")
 
 	def chat(self, msg):
 		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
@@ -125,7 +156,7 @@ class ChatMessage:
 			key_description = self.text
 		key_description = "Chat \'" + key_description + "\'"
 
-		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
+		self.callback = lambda pressed: self.key_passthrough(pressed)  # Small hack to get around the callback signature reqs.
 		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", key_description, self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
@@ -139,9 +170,12 @@ class ChatMessage:
 	def unsave_hotkey(self):
 		obs.obs_data_erase(self.obs_data, "chat_hotkey_" + str(self.position))
 
-	def send(self, pressed=True):
+	def key_passthrough(self, pressed):
 		if pressed:
-			self.irc.connect()
+			self.send()
+
+	def send(self, suppress_warnings=True):
+		if self.irc.connect(suppress_warnings):
 			self.irc.chat(self.text)
 			self.irc.disconnect()
 
@@ -199,6 +233,12 @@ class ChatMessage:
 
 # OBS Script Functions
 
+def test_authentication(prop, props):
+	twitch.test_authentication()
+
+def test_message(prop, props):
+	ChatMessage.messages[0].send(False)
+
 def script_description():
 	return "<b>Twitch Chat Spam</b>" + \
 			"<hr>" + \
@@ -225,6 +265,7 @@ def script_update(settings):
 		messages.append(obs.obs_data_get_string(message_object, "value"))
 
 	ChatMessage.check_messages(messages, settings)
+	obs.obs_data_array_release(obs_messages)
 
 	#print("Settings JSON", obs.obs_data_get_json(settings))
 
@@ -236,9 +277,11 @@ def script_properties():
 	obs.obs_properties_add_text(props, "oauth", "Oauth", obs.OBS_TEXT_PASSWORD)
 
 	obs.obs_properties_add_editable_list(props, "messages", "Messages", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
+	obs.obs_properties_add_button(props, "test_auth", "Test Authentication", test_authentication)
+	obs.obs_properties_add_button(props, "test_message", "Test Message #1", test_message)
 
 	return props
-#
+
 def script_save(settings):
 	for message in ChatMessage.messages:
 		message.save_hotkey()

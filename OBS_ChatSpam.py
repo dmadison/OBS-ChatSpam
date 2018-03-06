@@ -156,7 +156,7 @@ class ChatMessage:
 			key_description = self.text
 		key_description = "Chat \'" + key_description + "\'"
 
-		self.callback = lambda pressed: self.send(pressed)  # Small hack to get around the callback signature reqs.
+		self.callback = lambda pressed: self.key_passthrough(pressed)  # Small hack to get around the callback signature reqs.
 		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", key_description, self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
@@ -170,8 +170,12 @@ class ChatMessage:
 	def unsave_hotkey(self):
 		obs.obs_data_erase(self.obs_data, "chat_hotkey_" + str(self.position))
 
-	def send(self, pressed=True):
-		if pressed and self.irc.connect():
+	def key_passthrough(self, pressed):
+		if pressed:
+			self.send()
+
+	def send(self, suppress_warnings=True):
+		if self.irc.connect(suppress_warnings):
 			self.irc.chat(self.text)
 			self.irc.disconnect()
 
@@ -233,7 +237,7 @@ def test_authentication(prop, props):
 	twitch.test_authentication()
 
 def test_message(prop, props):
-	ChatMessage.messages[0].send()
+	ChatMessage.messages[0].send(False)
 
 def script_description():
 	return "<b>Twitch Chat Spam</b>" + \

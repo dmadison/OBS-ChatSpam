@@ -265,6 +265,7 @@ def script_update(settings):
 		messages.append(obs.obs_data_get_string(message_object, "value"))
 
 	ChatMessage.check_messages(messages, settings)
+	obs.obs_data_array_release(obs_messages)
 
 	#print("Settings JSON", obs.obs_data_get_json(settings))
 

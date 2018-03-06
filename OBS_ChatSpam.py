@@ -20,7 +20,7 @@
 
 import obspython as obs
 import socket
-from time import sleep
+import time
 
 
 class TwitchIRC:
@@ -30,9 +30,11 @@ class TwitchIRC:
 		self.password = passw
 		self.host = host
 		self.port = port
-		self.max_rate = 20/30
+		self.rate_num_msgs = 19  # Number of messages allowed...
+		self.rate_timeframe = 30  # ...in timeframe of x seconds
 
 		self.__sock = socket.socket()
+		self.__message_timestamps = []
 
 	def connect(self, suppress_warnings=True):
 		connection_result = self.__connect()
@@ -83,9 +85,12 @@ class TwitchIRC:
 		print("Authentication successful!")
 
 	def chat(self, msg):
+		if not self.check_rates():
+			return  # Sending messages too fast!
+
 		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
 		print("Sent \'" + msg + "\'", "as", self.nickname, "in #" + self.channel)
-		sleep(self.max_rate)  # Simple way to avoid the rate limit
+		self.__message_timestamps.append(time.time() + self.rate_timeframe)
 
 	def read(self):
 		response = self.__read_socket()
@@ -104,6 +109,29 @@ class TwitchIRC:
 
 	def __pong(self, host):
 		self.__sock.send(("PONG" + host).encode("utf-8"))
+
+	def check_rates(self):
+		index = 0
+
+		# Remove timestamps that have passed
+		for index, timestamp in enumerate(self.__message_timestamps):
+			if time.time() <= timestamp:
+				break
+		self.__message_timestamps = self.__message_timestamps[index:]
+
+		# If at max rate, throw an error
+		if len(self.__message_timestamps) >= self.rate_num_msgs:
+			next_clear = int(self.__message_timestamps[0] - time.time())
+			msg_plural = "s"
+
+			if next_clear <= 1:
+				next_clear = 1  # Avoiding "wait 0 more seconds" messages
+				msg_plural = ""
+
+			print("Error: Rate limit reached. Please wait " + str(next_clear) + " more second" + msg_plural)
+			return False
+
+		return True
 
 twitch = TwitchIRC()
 
@@ -175,6 +203,9 @@ class ChatMessage:
 			self.send()
 
 	def send(self, suppress_warnings=True):
+		if not self.irc.check_rates():
+			return  # Sending messages too fast!
+
 		if self.irc.connect(suppress_warnings):
 			self.irc.chat(self.text)
 			self.irc.disconnect()

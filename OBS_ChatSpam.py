@@ -302,12 +302,9 @@ def script_description():
 			"www.partsnotincluded.com"
 
 def script_update(settings):
-	global chat_text
-
 	twitch.channel = obs.obs_data_get_string(settings, "channel").lower()
 	twitch.nickname = obs.obs_data_get_string(settings, "user").lower()
 	twitch.password = obs.obs_data_get_string(settings, "oauth").lower()
-	chat_text = obs.obs_data_get_string(settings, "chat_text")
 
 	obs_messages = obs.obs_data_get_array(settings, "messages")
 	num_messages = obs.obs_data_array_count(obs_messages)

@@ -305,7 +305,11 @@ def script_description():
 def script_update(settings):
 	twitch.channel = obs.obs_data_get_string(settings, "channel").lower()
 	twitch.nickname = obs.obs_data_get_string(settings, "user").lower()
-	twitch.password = obs.obs_data_get_string(settings, "oauth").lower()
+
+	new_oauth = obs.obs_data_get_string(settings, "oauth").lower()
+	if new_oauth != twitch.password:
+		twitch.disconnect()  # Disconnect old oauth connection, if it exists
+		twitch.password = new_oauth
 
 	obs_messages = obs.obs_data_get_array(settings, "messages")
 	num_messages = obs.obs_data_array_count(obs_messages)

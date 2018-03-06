@@ -85,8 +85,10 @@ class TwitchIRC:
 		print("Authentication successful!")
 
 	def chat(self, msg):
-		if not self.check_rates():
-			return  # Sending messages too fast!
+		# (So long as this function is only accessed via "ChatMessage", this check is redundant)
+		# (Note: Checked in 'ChatMessage' to avoid spamming authentication)
+		#if not self.check_rates():
+		#	return  # Sending messages too fast!
 
 		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
 		print("Sent \'" + msg + "\'", "as", self.nickname, "in #" + self.channel)

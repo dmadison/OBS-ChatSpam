@@ -16,5 +16,7 @@ Fill out the configuration settings in the script properties:
 
 Add messages to the message list for things you want to say in chat. Each message gets a dedicated hotkey that can be configured in the OBS hotkey settings.
 
+You can test the script by using the "Test Authentication" button. This will raise an exception if there is any sort of authentication issue.
+
 ## License
 This script is licensed under the terms of the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html).

@@ -34,9 +34,29 @@ class TwitchIRC:
 
 		self.__sock = socket.socket()
 
-	def connect(self):
+	def connect(self, suppress_warnings=True):
+		connection_result = self.__connect()
+
+		if connection_result is not True:
+			if suppress_warnings:
+				print("Connection Error:", connection_result)
+				return False
+			else:
+				raise UserWarning(connection_result)
+
+		return True
+
+	def __connect(self):
 		self.__sock = socket.socket()
-		self.__sock.connect((self.host, self.port))
+		self.__sock.settimeout(1)  # One second to connect
+
+		try:
+			self.__sock.connect((self.host, self.port))
+		except socket.gaierror:
+			return "Cannot find server"
+		except (TimeoutError, socket.timeout):
+			return "No response from server (connection timed out)"
+
 		if self.password is not "":
 			self.__sock.send("PASS {}\r\n".format(self.password).encode("utf-8"))
 		self.__sock.send("NICK {}\r\n".format(self.nickname).encode("utf-8"))
@@ -45,11 +65,18 @@ class TwitchIRC:
 		auth_response = self.read()
 
 		if "Welcome, GLHF!" not in auth_response:
-			raise UserWarning("Authentication Error!")
+			return "Bad Authentication! Check your Oauth key"
+
+		return True
 
 	def disconnect(self):
 		self.__sock.shutdown(socket.SHUT_RDWR)
 		self.__sock.close()
+
+	def test_authentication(self):
+		if self.connect(False):
+			self.disconnect()
+		print("Authentication successful!")
 
 	def chat(self, msg):
 		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
@@ -140,8 +167,7 @@ class ChatMessage:
 		obs.obs_data_erase(self.obs_data, "chat_hotkey_" + str(self.position))
 
 	def send(self, pressed=True):
-		if pressed:
-			self.irc.connect()
+		if pressed and self.irc.connect():
 			self.irc.chat(self.text)
 			self.irc.disconnect()
 
@@ -199,6 +225,9 @@ class ChatMessage:
 
 # OBS Script Functions
 
+def test_authentication(prop, props):
+	twitch.test_authentication()
+
 def script_description():
 	return "<b>Twitch Chat Spam</b>" + \
 			"<hr>" + \
@@ -236,9 +265,10 @@ def script_properties():
 	obs.obs_properties_add_text(props, "oauth", "Oauth", obs.OBS_TEXT_PASSWORD)
 
 	obs.obs_properties_add_editable_list(props, "messages", "Messages", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
+	obs.obs_properties_add_button(props, "test_auth", "Test Authentication", test_authentication)
 
 	return props
-#
+
 def script_save(settings):
 	for message in ChatMessage.messages:
 		message.save_hotkey()

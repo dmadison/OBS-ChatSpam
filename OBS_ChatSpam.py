@@ -100,18 +100,20 @@ class TwitchIRC:
 			self.disconnect()
 		print("Authentication successful!")
 
-	def chat(self, msg):
-		# (So long as this function is only accessed via "ChatMessage", this check is redundant)
-		# (Note: Checked in 'ChatMessage' to avoid spamming authentication)
-		#if not self.check_rates():
-		#	return  # Sending messages too fast!
+	def chat(self, msg, suppress_warnings=True):
+		if not self.check_rates() or not self.connect(suppress_warnings):
+			return
 
+		# Store timestamps for rate limit and connection timeout
 		message_time = time.time()
 		self.__message_timestamps.append(message_time + self.rate_timeframe)
 		self.__last_message = message_time
 
-		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
+		self.__chat_direct(msg)
 		print("Sent \'" + msg + "\'", "as", self.nickname, "in #" + self.channel)
+
+	def __chat_direct(self, msg):
+		self.__sock.send("PRIVMSG #{} :{}\r\n".format(self.channel, msg).encode("utf-8"))
 
 	def read(self):
 		response = self.__read_socket()
@@ -224,11 +226,7 @@ class ChatMessage:
 			self.send()
 
 	def send(self, suppress_warnings=True):
-		if not self.irc.check_rates():
-			return  # Sending messages too fast!
-
-		if self.irc.connect(suppress_warnings):
-			self.irc.chat(self.text)
+		self.irc.chat(self.text, suppress_warnings)
 
 	@staticmethod
 	def check_messages(new_msgs, settings):

@@ -63,9 +63,13 @@ class TwitchIRC:
 		self.__sock.send("JOIN #{}\r\n".format(self.channel).encode("utf-8"))
 
 		auth_response = self.read()
-
 		if "Welcome, GLHF!" not in auth_response:
 			return "Bad Authentication! Check your Oauth key"
+
+		try:
+			self.read()  # Wait for "JOIN" response
+		except socket.timeout:
+			return "Channel not found!"
 
 		return True
 

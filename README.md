@@ -1,5 +1,5 @@
 # OBS Chat Spam Script
-This is a small Python script for OBS Studio that allows you to post messages in Twitch chat using OBS hotkeys. This can be used for posting general chat messages, spamming emotes, or triggering chat bot commands.
+This is a Python script for OBS Studio that allows you to post messages in Twitch chat using OBS hotkeys. This can be used for posting general chat messages, spamming emotes, or triggering chat bot commands.
 
 ## Installation
 The script only works with OBS Studio versions 21.x and later. If you have an older version you will need to update.

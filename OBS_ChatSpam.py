@@ -296,9 +296,11 @@ def script_description():
 			"<hr>" + \
 			"Python script for sending messages to Twitch chat using OBS hotkeys." + \
 			"<br/><br/>" + \
-			"Made by David Madison" + \
+			"Made by David Madison, © 2018" + \
+			"<br/><br/>" + \
+			"github.com/dmadison/OBS-ChatSpam" + \
 			"<br/>" + \
-			"www.partsnotincluded.com"
+			"partsnotincluded.com"
 
 def script_update(settings):
 	twitch.channel = obs.obs_data_get_string(settings, "channel").lower()

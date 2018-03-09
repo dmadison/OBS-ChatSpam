@@ -197,9 +197,6 @@ class ChatMessage:
 		self.position = pos
 		self.register_hotkey()
 
-	def load_hotkey(self):
-		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
-
 	def register_hotkey(self):
 		if len(self.text) > ChatMessage.max_description_length:
 			key_description = self.text[:ChatMessage.max_description_length - 3] + "..."
@@ -213,6 +210,9 @@ class ChatMessage:
 
 	def deregister_hotkey(self):
 		obs.obs_hotkey_unregister(self.callback)
+
+	def load_hotkey(self):
+		self.hotkey_saved_key = obs.obs_data_get_array(self.obs_data, "chat_hotkey_" + str(self.position))
 
 	def save_hotkey(self):
 		self.hotkey_saved_key = obs.obs_hotkey_save(self.hotkey_id)

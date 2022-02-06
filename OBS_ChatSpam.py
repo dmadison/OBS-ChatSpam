@@ -205,7 +205,7 @@ class ChatMessage:
 		key_description = "Chat \'" + key_description + "\'"
 
 		self.callback = lambda pressed: self.key_passthrough(pressed)  # Small hack to get around the callback signature reqs.
-		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey", key_description, self.callback)
+		self.hotkey_id = obs.obs_hotkey_register_frontend("chat_hotkey_" + str(self.position), key_description, self.callback)
 		obs.obs_hotkey_load(self.hotkey_id, self.hotkey_saved_key)
 
 	def deregister_hotkey(self):
